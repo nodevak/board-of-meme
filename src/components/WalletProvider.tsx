@@ -12,9 +12,10 @@ import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
 const RPC_URL =
-  process.env.NEXT_PUBLIC_SOLANA_NETWORK === "devnet"
+  process.env.NEXT_PUBLIC_HELIUS_RPC_URL ??
+  (process.env.NEXT_PUBLIC_SOLANA_NETWORK === "devnet"
     ? "https://api.devnet.solana.com"
-    : `https://mainnet.helius-rpc.com/?api-key=${process.env.NEXT_PUBLIC_HELIUS_API_KEY ?? ""}`;
+    : "https://api.mainnet-beta.solana.com");
 
 export const SolanaWalletProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const wallets = useMemo(
