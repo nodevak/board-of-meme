@@ -3,15 +3,17 @@ import { NextRequest, NextResponse } from "next/server";
 const HELIUS_RPC = process.env.HELIUS_RPC_URL;
 const TOKEN_MINT = process.env.NEXT_PUBLIC_TOKEN_MINT;
 
-// ─── GET /api/balance?wallet=ADDRESS ─────────────────────────────────────────
 export async function GET(req: NextRequest) {
   const wallet = req.nextUrl.searchParams.get("wallet");
 
   if (!wallet) {
-    return NextResponse.json({ error: "Missing wallet param" }, { status: 400 });
+    return NextResponse.json({ error: "Missing wallet param", tokens: 0 }, { status: 400 });
   }
-  if (!HELIUS_RPC || !TOKEN_MINT) {
-    return NextResponse.json({ error: "Server not configured" }, { status: 500 });
+
+  // If not configured, return 0 gracefully (admin can still post)
+  if (!HELIUS_RPC || !TOKEN_MINT || TOKEN_MINT === "YOUR_TOKEN_MINT_ADDRESS_HERE") {
+    console.warn("[balance] Helius RPC or TOKEN_MINT not configured");
+    return NextResponse.json({ tokens: 0, wallet, warning: "RPC not configured" });
   }
 
   try {
@@ -28,29 +30,29 @@ export async function GET(req: NextRequest) {
           { encoding: "jsonParsed" },
         ],
       }),
-      next: { revalidate: 60 }, // cache 60s
     });
+
+    if (!res.ok) {
+      console.error("[balance] Helius HTTP error:", res.status);
+      return NextResponse.json({ tokens: 0, wallet });
+    }
 
     const data = await res.json();
 
     if (data.error) {
-      console.error("[Helius RPC error]", data.error);
-      return NextResponse.json({ error: "RPC error", tokens: 0 }, { status: 500 });
+      console.error("[balance] Helius RPC error:", data.error);
+      return NextResponse.json({ tokens: 0, wallet });
     }
 
-    const accounts: Array<{ account: { data: { parsed: { info: { tokenAmount: { uiAmount: number } } } } } }> =
-      data.result?.value ?? [];
-
-    // Sum across all token accounts (usually just one)
-    const totalUiAmount = accounts.reduce((sum, acc) => {
-      return sum + (acc.account.data.parsed.info.tokenAmount.uiAmount ?? 0);
+    const accounts = data.result?.value ?? [];
+    const totalUiAmount = accounts.reduce((sum: number, acc: any) => {
+      return sum + (acc?.account?.data?.parsed?.info?.tokenAmount?.uiAmount ?? 0);
     }, 0);
 
-    const tokens = Math.floor(totalUiAmount);
-
-    return NextResponse.json({ tokens, wallet });
+    return NextResponse.json({ tokens: Math.floor(totalUiAmount), wallet });
   } catch (err) {
     console.error("[GET /api/balance]", err);
-    return NextResponse.json({ error: "Failed to fetch balance", tokens: 0 }, { status: 500 });
+    // Return 0 gracefully instead of crashing — admin bypass still works
+    return NextResponse.json({ tokens: 0, wallet });
   }
 }

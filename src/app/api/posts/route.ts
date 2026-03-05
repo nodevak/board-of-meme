@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, initDB, Post } from "@/lib/db";
 
-// ─── GET /api/posts ───────────────────────────────────────────────────────────
+const ADMIN_WALLET = process.env.NEXT_PUBLIC_ADMIN_WALLET ?? "";
+
 export async function GET() {
   try {
     await initDB();
@@ -18,7 +19,6 @@ export async function GET() {
   }
 }
 
-// ─── POST /api/posts ──────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
     await initDB();
@@ -26,11 +26,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { wallet, tokens, type, content, name } = body;
 
-    // ── Validation ──
+    const isAdmin = ADMIN_WALLET !== "" && wallet === ADMIN_WALLET;
+
     if (!wallet || typeof wallet !== "string" || wallet.length > 44) {
       return NextResponse.json({ error: "Invalid wallet address" }, { status: 400 });
     }
-    if (!tokens || typeof tokens !== "number" || tokens < 1) {
+    if (!isAdmin && (!tokens || typeof tokens !== "number" || tokens < 1)) {
       return NextResponse.json({ error: "No token balance" }, { status: 403 });
     }
     if (!["image", "text"].includes(type)) {
@@ -40,7 +41,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing content" }, { status: 400 });
     }
 
-    // ── Content size guard (images ~2MB base64 max) ──
     const maxBytes = type === "image" ? 2_500_000 : 2_000;
     if (content.length > maxBytes) {
       return NextResponse.json(
@@ -49,24 +49,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Rate limit: 1 post per wallet per day ──
-    const existing = await sql`
-      SELECT id FROM posts
-      WHERE wallet = ${wallet}
-        AND created_at > NOW() - INTERVAL '24 hours'
-      LIMIT 1
-    `;
-    if (existing.length > 0) {
-      return NextResponse.json(
-        { error: "You can post once every 24 hours" },
-        { status: 429 }
-      );
+    // Rate limit: skip for admin
+    if (!isAdmin) {
+      const existing = await sql`
+        SELECT id FROM posts
+        WHERE wallet = ${wallet}
+          AND created_at > NOW() - INTERVAL '24 hours'
+        LIMIT 1
+      `;
+      if (existing.length > 0) {
+        return NextResponse.json({ error: "You can post once every 24 hours" }, { status: 429 });
+      }
     }
 
-    // ── Insert ──
+    const finalTokens = isAdmin && (!tokens || tokens < 1) ? 999999999 : tokens;
+
     const [post] = await sql<Post[]>`
       INSERT INTO posts (wallet, tokens, type, content, name)
-      VALUES (${wallet}, ${tokens}, ${type}, ${content}, ${name ?? null})
+      VALUES (${wallet}, ${finalTokens}, ${type}, ${content}, ${name ?? null})
       RETURNING *
     `;
 
