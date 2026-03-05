@@ -1,0 +1,53 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background: #080808;
+  color: #f0f0f0;
+  font-family: 'Courier New', Courier, monospace;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0d0d0d; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
+
+/* Selection */
+::selection { background: #FFE500; color: #000; }
+
+/* Wallet adapter override */
+.wallet-adapter-button {
+  font-family: 'Courier New', Courier, monospace !important;
+  font-weight: 900 !important;
+  letter-spacing: 1px !important;
+  border-radius: 2px !important;
+}
+.wallet-adapter-modal-wrapper {
+  background: #111 !important;
+  border: 2px solid #FFE500 !important;
+  font-family: 'Courier New', Courier, monospace !important;
+}
+.wallet-adapter-modal-title {
+  color: #FFE500 !important;
+  font-family: 'Courier New', Courier, monospace !important;
+  letter-spacing: 3px !important;
+}
+.wallet-adapter-button-trigger {
+  background: #FFE500 !important;
+  color: #000 !important;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
