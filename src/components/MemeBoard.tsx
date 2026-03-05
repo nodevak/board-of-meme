@@ -12,6 +12,8 @@ const TOKEN_NAME   = process.env.NEXT_PUBLIC_TOKEN_NAME  ?? "TOKEN";
 const TOKEN_MINT   = process.env.NEXT_PUBLIC_TOKEN_MINT  ?? "";
 const MIN_TOKENS   = parseInt(process.env.NEXT_PUBLIC_MIN_TOKENS ?? "1");
 const ADMIN_WALLET = process.env.NEXT_PUBLIC_ADMIN_WALLET ?? "";
+const GITHUB_URL   = process.env.NEXT_PUBLIC_GITHUB_URL ?? "";
+const TWITTER_URL  = process.env.NEXT_PUBLIC_TWITTER_URL ?? "";
 
 export function MemeBoard() {
   const { publicKey, connected } = useWallet();
@@ -27,13 +29,11 @@ export function MemeBoard() {
   const [holders, setHolders]                = useState<number | null>(null);
   const [copied, setCopied]                  = useState(false);
 
-  // Ticker animation
   useEffect(() => {
     const t = setInterval(() => setTick((x) => x + 1), 60);
     return () => clearInterval(t);
   }, []);
 
-  // Fetch posts
   useEffect(() => {
     fetch("/api/posts")
       .then((r) => r.json())
@@ -41,7 +41,6 @@ export function MemeBoard() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Fetch real holder count from Helius (server-side)
   useEffect(() => {
     fetch("/api/holders")
       .then((r) => r.json())
@@ -49,7 +48,6 @@ export function MemeBoard() {
       .catch(() => {});
   }, []);
 
-  // Fetch market cap from DexScreener
   useEffect(() => {
     if (!TOKEN_MINT || TOKEN_MINT === "YOUR_TOKEN_MINT_ADDRESS_HERE") return;
     fetch(`https://api.dexscreener.com/latest/dex/tokens/${TOKEN_MINT}`)
@@ -58,16 +56,15 @@ export function MemeBoard() {
         const pair = d?.pairs?.[0];
         if (pair?.fdv) {
           const fdv = parseFloat(pair.fdv);
-          if (fdv >= 1_000_000_000)     setMarketCap(`$${(fdv / 1_000_000_000).toFixed(1)}B`);
-          else if (fdv >= 1_000_000)    setMarketCap(`$${(fdv / 1_000_000).toFixed(1)}M`);
-          else if (fdv >= 1_000)        setMarketCap(`$${(fdv / 1_000).toFixed(1)}K`);
-          else                          setMarketCap(`$${fdv.toFixed(0)}`);
+          if (fdv >= 1_000_000_000)  setMarketCap(`$${(fdv / 1_000_000_000).toFixed(1)}B`);
+          else if (fdv >= 1_000_000) setMarketCap(`$${(fdv / 1_000_000).toFixed(1)}M`);
+          else if (fdv >= 1_000)     setMarketCap(`$${(fdv / 1_000).toFixed(1)}K`);
+          else                       setMarketCap(`$${fdv.toFixed(0)}`);
         }
       })
       .catch(() => {});
   }, []);
 
-  // Token balance check
   useEffect(() => {
     if (!connected || !publicKey) { setTokens(null); return; }
     setCheckingBalance(true);
@@ -84,7 +81,6 @@ export function MemeBoard() {
     async (data: { type: "image" | "text"; content: string; name: string }) => {
       if (!publicKey || tokens === null) throw new Error("Wallet not connected");
       if (!isAdmin && tokens < MIN_TOKENS) throw new Error(`Need at least ${MIN_TOKENS} ${TOKEN_NAME} to post`);
-
       const res = await fetch("/api/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -96,7 +92,6 @@ export function MemeBoard() {
           name: data.name || null,
         }),
       });
-
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Post failed");
       setPosts((prev) => [json.post, ...prev]);
@@ -120,9 +115,7 @@ export function MemeBoard() {
   const offset        = tick % tickerText.length;
   const tickerDisplay = (tickerText + tickerText).slice(offset, offset + 80);
 
-  const shortMint = TOKEN_MINT
-    ? `${TOKEN_MINT.slice(0, 6)}...${TOKEN_MINT.slice(-6)}`
-    : "";
+  const shortMint = TOKEN_MINT ? `${TOKEN_MINT.slice(0, 6)}...${TOKEN_MINT.slice(-6)}` : "";
 
   const formatHolders = (n: number) => {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -136,16 +129,46 @@ export function MemeBoard() {
 
       {/* ── Header ── */}
       <header style={styles.header}>
+
+        {/* LEFT: logo + CA + social links */}
         <div style={styles.headerLeft}>
           <div>
             <div style={styles.logoMain}>BOARD OF MEME</div>
             {isAdmin && <div style={styles.adminBadge}>⚡ ADMIN</div>}
           </div>
+
+          <div style={styles.leftMeta}>
+            {/* Contract address */}
+            {TOKEN_MINT && (
+              <div style={styles.contractRow} onClick={copyMint} title="Click to copy contract address">
+                <span style={styles.contractLabel}>CA:</span>
+                <span style={styles.contractAddr}>{shortMint}</span>
+                <span style={{ ...styles.copyIcon, color: copied ? "#00FF88" : "#FFE500" }}>
+                  {copied ? "✓ COPIED" : "⎘ COPY"}
+                </span>
+              </div>
+            )}
+
+            {/* Social links */}
+            <div style={styles.socialRow}>
+              {TWITTER_URL && (
+                <a href={TWITTER_URL} target="_blank" rel="noopener noreferrer" style={styles.socialBtn}>
+                  𝕏 TWITTER
+                </a>
+              )}
+              {GITHUB_URL && (
+                <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" style={styles.socialBtn}>
+                  ⌥ GITHUB
+                </a>
+              )}
+            </div>
+          </div>
+
           <div style={styles.tickerTrack}>{tickerDisplay}</div>
         </div>
 
+        {/* RIGHT: stats + wallet */}
         <div style={styles.headerRight}>
-          {/* Stats row */}
           <div style={styles.statsRow}>
             <div style={styles.stat}>
               <span style={styles.statVal}>{posts.length}</span>
@@ -153,9 +176,7 @@ export function MemeBoard() {
             </div>
             <div style={styles.statDivider} />
             <div style={styles.stat}>
-              <span style={styles.statVal}>
-                {holders !== null ? formatHolders(holders) : "—"}
-              </span>
+              <span style={styles.statVal}>{holders !== null ? formatHolders(holders) : "—"}</span>
               <span style={styles.statLbl}>HOLDERS</span>
             </div>
             {marketCap && (
@@ -169,7 +190,6 @@ export function MemeBoard() {
             )}
           </div>
 
-          {/* Balance badge */}
           {connected && tokens !== null && (
             <div style={styles.balanceBadge}>
               {userTier && <span>{userTier.emoji}</span>}
@@ -180,33 +200,20 @@ export function MemeBoard() {
             </div>
           )}
 
-          {/* Wallet + post + contract stacked */}
-          <div style={styles.walletStack}>
-            <div style={styles.walletRow}>
-              <WalletMultiButton style={walletBtnStyle} />
-              {canPost && (
-                <button style={styles.postBtn} onClick={() => setShowUpload(true)}>
-                  + POST MEME
-                </button>
-              )}
-            </div>
-
-            {TOKEN_MINT && (
-              <div style={styles.contractRow} onClick={copyMint} title="Click to copy contract address">
-                <span style={styles.contractLabel}>CA:</span>
-                <span style={styles.contractAddr}>{shortMint}</span>
-                <span style={{ ...styles.copyIcon, color: copied ? "#00FF88" : "#FFE500" }}>
-                  {copied ? "✓ COPIED" : "⎘ COPY"}
-                </span>
-              </div>
-            )}
-
-            {connected && !checkingBalance && tokens !== null && tokens < MIN_TOKENS && !isAdmin && (
-              <div style={styles.noTokensWarning}>
-                ⚠ Need {formatTokens(MIN_TOKENS)}+ {TOKEN_NAME} to post
-              </div>
+          <div style={styles.walletRow}>
+            <WalletMultiButton style={walletBtnStyle} />
+            {canPost && (
+              <button style={styles.postBtn} onClick={() => setShowUpload(true)}>
+                + POST MEME
+              </button>
             )}
           </div>
+
+          {connected && !checkingBalance && tokens !== null && tokens < MIN_TOKENS && !isAdmin && (
+            <div style={styles.noTokensWarning}>
+              ⚠ Need {formatTokens(MIN_TOKENS)}+ {TOKEN_NAME} to post
+            </div>
+          )}
         </div>
       </header>
 
@@ -245,7 +252,6 @@ export function MemeBoard() {
         )}
       </main>
 
-      {/* ── Upload Modal ── */}
       {showUpload && publicKey && tokens !== null && (
         <UploadModal
           wallet={publicKey.toBase58()}
@@ -255,7 +261,6 @@ export function MemeBoard() {
         />
       )}
 
-      {/* ── Detail Modal ── */}
       {selected && (
         <div style={styles.overlay} onClick={() => setSelected(null)}>
           <div style={styles.detailModal} onClick={(e) => e.stopPropagation()}>
@@ -296,10 +301,17 @@ const styles: Record<string, React.CSSProperties> = {
   root: { minHeight:"100vh", background:"#080808", fontFamily:"'Courier New',monospace", color:"#f0f0f0", position:"relative" },
   scanlines: { position:"fixed", inset:0, pointerEvents:"none", zIndex:9999, background:"repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.07) 2px,rgba(0,0,0,0.07) 4px)" },
   header: { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 20px", borderBottom:"2px solid #FFE500", background:"#0d0d0d", gap:16, flexWrap:"wrap", position:"sticky", top:0, zIndex:100 },
-  headerLeft: { display:"flex", alignItems:"center", gap:20, flex:1, minWidth:0 },
+  headerLeft: { display:"flex", alignItems:"center", gap:16, flex:1, minWidth:0 },
+  leftMeta: { display:"flex", flexDirection:"column", gap:5 },
   logoMain: { fontSize:26, fontWeight:900, letterSpacing:5, color:"#FFE500", lineHeight:1 },
   adminBadge: { fontSize:9, letterSpacing:3, color:"#FF3B00", marginTop:3, fontWeight:900 },
   tickerTrack: { fontSize:10, color:"#444", whiteSpace:"nowrap", overflow:"hidden", flex:1, minWidth:0, letterSpacing:2 },
+  contractRow: { display:"flex", alignItems:"center", gap:6, cursor:"pointer", background:"#111", border:"1px solid #2a2a2a", padding:"3px 8px", borderRadius:2 },
+  contractLabel: { fontSize:9, color:"#555", letterSpacing:2, fontWeight:700 },
+  contractAddr: { fontSize:10, color:"#888", letterSpacing:1 },
+  copyIcon: { fontSize:9, letterSpacing:1, fontWeight:700 },
+  socialRow: { display:"flex", gap:6 },
+  socialBtn: { fontSize:9, fontWeight:700, letterSpacing:2, color:"#555", textDecoration:"none", border:"1px solid #222", padding:"2px 8px", borderRadius:2, transition:"color 0.15s, border-color 0.15s" },
   headerRight: { display:"flex", alignItems:"center", gap:12, flexShrink:0, flexWrap:"wrap" },
   statsRow: { display:"flex", alignItems:"center", gap:10 },
   stat: { display:"flex", flexDirection:"column", alignItems:"center" },
@@ -307,13 +319,8 @@ const styles: Record<string, React.CSSProperties> = {
   statLbl: { fontSize:8, color:"#555", letterSpacing:2 },
   statDivider: { width:1, height:28, background:"#2a2a2a" },
   balanceBadge: { display:"flex", alignItems:"center", gap:6, background:"#1a1a1a", padding:"6px 10px", fontSize:12, border:"1px solid #2a2a2a" },
-  walletStack: { display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5 },
   walletRow: { display:"flex", alignItems:"center", gap:8 },
   postBtn: { background:"#FF3B00", color:"#fff", border:"none", padding:"8px 16px", fontFamily:"'Courier New',monospace", fontWeight:900, fontSize:12, cursor:"pointer", letterSpacing:1 },
-  contractRow: { display:"flex", alignItems:"center", gap:6, cursor:"pointer", background:"#0d0d0d", border:"1px solid #2a2a2a", padding:"4px 10px", borderRadius:2 },
-  contractLabel: { fontSize:9, color:"#555", letterSpacing:2, fontWeight:700 },
-  contractAddr: { fontSize:10, color:"#888", letterSpacing:1 },
-  copyIcon: { fontSize:9, letterSpacing:1, fontWeight:700 },
   noTokensWarning: { fontSize:11, color:"#FF3B00", fontWeight:700 },
   legend: { display:"flex", gap:16, padding:"8px 20px", background:"#0a0a0a", borderBottom:"1px solid #1a1a1a", flexWrap:"wrap" },
   legendItem: { display:"flex", alignItems:"center", gap:7 },
