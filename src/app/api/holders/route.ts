@@ -1,41 +1,47 @@
 import { NextResponse } from "next/server";
 
-const HELIUS_RPC = process.env.HELIUS_RPC_URL;
-const TOKEN_MINT = process.env.NEXT_PUBLIC_TOKEN_MINT;
+const TOKEN_MINT   = process.env.NEXT_PUBLIC_TOKEN_MINT;
+const BIRDEYE_KEY  = process.env.BIRDEYE_API_KEY; // optional, works without key on free tier
+
+let cachedHolders: number | null = null;
+let cacheTime = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export async function GET() {
-  if (!HELIUS_RPC || !TOKEN_MINT || TOKEN_MINT === "YOUR_TOKEN_MINT_ADDRESS_HERE") {
+  if (!TOKEN_MINT || TOKEN_MINT === "YOUR_TOKEN_MINT_ADDRESS_HERE") {
     return NextResponse.json({ holders: null });
   }
 
+  // Return cache if fresh
+  if (cachedHolders !== null && Date.now() - cacheTime < CACHE_TTL) {
+    return NextResponse.json({ holders: cachedHolders });
+  }
+
   try {
-    const res = await fetch(HELIUS_RPC, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: "holders",
-        method: "getTokenAccounts",
-        params: {
-          mint: TOKEN_MINT,
-          limit: 1,
-          page: 1,
-          displayOptions: {},
-        },
-      }),
-    });
+    const headers: Record<string, string> = {
+      "accept": "application/json",
+      "x-chain": "solana",
+    };
+    if (BIRDEYE_KEY) headers["X-API-KEY"] = BIRDEYE_KEY;
+
+    const res = await fetch(
+      `https://public-api.birdeye.so/defi/token_overview?address=${TOKEN_MINT}`,
+      { headers }
+    );
 
     const data = await res.json();
 
-    // Log full response so we can debug
-    console.log("[holders] raw response:", JSON.stringify(data).slice(0, 500));
+    // Birdeye returns holder count in data.data.holder
+    const holders = data?.data?.holder ?? null;
 
-    // Correct path: data.result.total
-    const total = data?.result?.total ?? null;
+    if (holders !== null) {
+      cachedHolders = holders;
+      cacheTime = Date.now();
+    }
 
-    return NextResponse.json({ holders: total, raw: data?.result ? { total: data.result.total } : data });
+    return NextResponse.json({ holders });
   } catch (err) {
     console.error("[GET /api/holders]", err);
-    return NextResponse.json({ holders: null, error: String(err) });
+    return NextResponse.json({ holders: cachedHolders });
   }
 }
