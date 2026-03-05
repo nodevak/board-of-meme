@@ -1,10 +1,10 @@
 export const TIER_THRESHOLDS = [
-  { min: 1_000_000, tier: 10, label: "WHALE",   emoji: "🐋", size: 340 },
-  { min: 500_000,   tier: 8,  label: "SHARK",   emoji: "🦈", size: 280 },
-  { min: 100_000,   tier: 6,  label: "DOLPHIN", emoji: "🐬", size: 210 },
-  { min: 50_000,    tier: 4,  label: "FISH",    emoji: "🐟", size: 160 },
-  { min: 10_000,    tier: 3,  label: "SHRIMP",  emoji: "🦐", size: 120 },
-  { min: 0,         tier: 2,  label: "PLANKTON",emoji: "🦠", size: 88  },
+  { min: 20_000_000, tier: 10, label: "WHALE",    emoji: "🐋", size: 340 },
+  { min: 10_000_000, tier: 8,  label: "SHARK",    emoji: "🦈", size: 280 },
+  { min: 5_000_000,  tier: 6,  label: "DOLPHIN",  emoji: "🐬", size: 210 },
+  { min: 1_000_000,  tier: 4,  label: "FISH",     emoji: "🐟", size: 160 },
+  { min: 500_000,    tier: 3,  label: "SHRIMP",   emoji: "🦐", size: 120 },
+  { min: 0,          tier: 2,  label: "PLANKTON", emoji: "🦠", size: 88  },
 ] as const;
 
 export function getTier(tokens: number) {

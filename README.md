@@ -1,6 +1,6 @@
 # Board of Meme 🎭
 
-> A token-gated meme canvas for Board of Meme token holders.  
+> A token-gated meme canvas for Board of Memes token holders.  
 > Your bag size determines your tile size on the board.
 
 ---
@@ -9,9 +9,9 @@
 
 | Tier     | Tokens Required | Tile Size |
 |----------|-----------------|-----------|
-| 🐋 Whale   | 1,000,000+      | 340×340   |
-| 🦈 Shark   | 500,000+        | 280×280   |
-| 🐬 Dolphin | 100,000+        | 210×210   |
-| 🐟 Fish    | 50,000+         | 160×160   |
-| 🦐 Shrimp  | 10,000+         | 120×120   |
-| 🦠 Plankton| Any amount      | 88×88     |
+| 🐋 Whale   | 20,000,000+     | 340×340   |
+| 🦈 Shark   | 10,000,000+     | 280×280   |
+| 🐬 Dolphin | 5,000,000+      | 210×210   |
+| 🐟 Fish    | 1,000,000+      | 160×160   |
+| 🦐 Shrimp  | 500,000+        | 120×120   |
+| 🦠 Plankton| 100,000+        | 88×88     |
