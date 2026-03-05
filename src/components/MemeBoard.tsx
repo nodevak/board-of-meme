@@ -8,26 +8,31 @@ import { Tile } from "./Tile";
 import { UploadModal } from "./UploadModal";
 import { getTier, timeAgo, shortWallet, formatTokens, TIER_THRESHOLDS } from "@/lib/utils";
 
-const TOKEN_NAME = process.env.NEXT_PUBLIC_TOKEN_NAME ?? "TOKEN";
-const MIN_TOKENS = parseInt(process.env.NEXT_PUBLIC_MIN_TOKENS ?? "1");
+const TOKEN_NAME  = process.env.NEXT_PUBLIC_TOKEN_NAME ?? "TOKEN";
+const TOKEN_MINT  = process.env.NEXT_PUBLIC_TOKEN_MINT ?? "";
+const MIN_TOKENS  = parseInt(process.env.NEXT_PUBLIC_MIN_TOKENS ?? "1");
 const ADMIN_WALLET = process.env.NEXT_PUBLIC_ADMIN_WALLET ?? "";
 
 export function MemeBoard() {
   const { publicKey, connected } = useWallet();
-  const [posts, setPosts]           = useState<Post[]>([]);
-  const [tokens, setTokens]         = useState<number | null>(null);
+  const [posts, setPosts]                   = useState<Post[]>([]);
+  const [tokens, setTokens]                 = useState<number | null>(null);
   const [checkingBalance, setCheckingBalance] = useState(false);
-  const [showUpload, setShowUpload]  = useState(false);
-  const [selected, setSelected]     = useState<Post | null>(null);
-  const [loading, setLoading]       = useState(true);
-  const [postError, setPostError]   = useState("");
-  const [tick, setTick] = useState(0);
+  const [showUpload, setShowUpload]          = useState(false);
+  const [selected, setSelected]             = useState<Post | null>(null);
+  const [loading, setLoading]               = useState(true);
+  const [postError, setPostError]           = useState("");
+  const [tick, setTick]                     = useState(0);
+  const [marketCap, setMarketCap]           = useState<string | null>(null);
+  const [copied, setCopied]                 = useState(false);
 
+  // Ticker animation
   useEffect(() => {
     const t = setInterval(() => setTick((x) => x + 1), 60);
     return () => clearInterval(t);
   }, []);
 
+  // Fetch posts
   useEffect(() => {
     fetch("/api/posts")
       .then((r) => r.json())
@@ -35,6 +40,25 @@ export function MemeBoard() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Fetch market cap from DexScreener
+  useEffect(() => {
+    if (!TOKEN_MINT || TOKEN_MINT === "YOUR_TOKEN_MINT_ADDRESS_HERE") return;
+    fetch(`https://api.dexscreener.com/latest/dex/tokens/${TOKEN_MINT}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const pair = d?.pairs?.[0];
+        if (pair?.fdv) {
+          const fdv = parseFloat(pair.fdv);
+          if (fdv >= 1_000_000_000) setMarketCap(`$${(fdv / 1_000_000_000).toFixed(1)}B`);
+          else if (fdv >= 1_000_000)  setMarketCap(`$${(fdv / 1_000_000).toFixed(1)}M`);
+          else if (fdv >= 1_000)      setMarketCap(`$${(fdv / 1_000).toFixed(1)}K`);
+          else setMarketCap(`$${fdv.toFixed(0)}`);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Token balance
   useEffect(() => {
     if (!connected || !publicKey) { setTokens(null); return; }
     setCheckingBalance(true);
@@ -72,18 +96,31 @@ export function MemeBoard() {
     [publicKey, tokens, isAdmin]
   );
 
-  const canPost = connected && tokens !== null && !checkingBalance && (tokens >= MIN_TOKENS || isAdmin);
-  const userTier = tokens ? getTier(tokens) : null;
+  const copyMint = () => {
+    if (!TOKEN_MINT) return;
+    navigator.clipboard.writeText(TOKEN_MINT).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
-  const tickerText = `◆ BOARD OF MEME ◆ ${TOKEN_NAME} HOLDERS ONLY ◆ BIGGER BAGS = BIGGER MEME ◆ `;
-  const offset = tick % tickerText.length;
+  const canPost    = connected && tokens !== null && !checkingBalance && (tokens >= MIN_TOKENS || isAdmin);
+  const userTier   = tokens ? getTier(tokens) : null;
+  const holders    = new Set(posts.map((p) => p.wallet)).size;
+
+  const tickerText    = `◆ BOARD OF MEME ◆ ${TOKEN_NAME} HOLDERS ONLY ◆ BIGGER BAGS = BIGGER MEME ◆ `;
+  const offset        = tick % tickerText.length;
   const tickerDisplay = (tickerText + tickerText).slice(offset, offset + 80);
-  const totalTokensOnBoard = posts.reduce((s, p) => s + p.tokens, 0);
+
+  const shortMint = TOKEN_MINT
+    ? `${TOKEN_MINT.slice(0, 6)}...${TOKEN_MINT.slice(-6)}`
+    : "";
 
   return (
     <div style={styles.root}>
       <div style={styles.scanlines} />
 
+      {/* ── Header ── */}
       <header style={styles.header}>
         <div style={styles.headerLeft}>
           <div>
@@ -94,6 +131,7 @@ export function MemeBoard() {
         </div>
 
         <div style={styles.headerRight}>
+          {/* Stats */}
           <div style={styles.statsRow}>
             <div style={styles.stat}>
               <span style={styles.statVal}>{posts.length}</span>
@@ -101,11 +139,21 @@ export function MemeBoard() {
             </div>
             <div style={styles.statDivider} />
             <div style={styles.stat}>
-              <span style={styles.statVal}>{formatTokens(totalTokensOnBoard)}</span>
-              <span style={styles.statLbl}>TOKENS</span>
+              <span style={styles.statVal}>{holders}</span>
+              <span style={styles.statLbl}>HOLDERS</span>
             </div>
+            {marketCap && (
+              <>
+                <div style={styles.statDivider} />
+                <div style={styles.stat}>
+                  <span style={{ ...styles.statVal, color: "#00FF88" }}>{marketCap}</span>
+                  <span style={styles.statLbl}>MKTCAP</span>
+                </div>
+              </>
+            )}
           </div>
 
+          {/* My balance badge */}
           {connected && tokens !== null && (
             <div style={styles.balanceBadge}>
               {userTier && <span>{userTier.emoji}</span>}
@@ -116,21 +164,36 @@ export function MemeBoard() {
             </div>
           )}
 
-          <WalletMultiButton style={walletBtnStyle} />
-
-          {canPost && (
-            <button style={styles.postBtn} onClick={() => setShowUpload(true)}>
-              + POST MEME
-            </button>
-          )}
-          {connected && !checkingBalance && tokens !== null && tokens < MIN_TOKENS && !isAdmin && (
-            <div style={styles.noTokensWarning}>
-              ⚠ Need {formatTokens(MIN_TOKENS)}+ {TOKEN_NAME} to post
+          {/* Wallet + post btn + contract address stacked */}
+          <div style={styles.walletStack}>
+            <div style={styles.walletRow}>
+              <WalletMultiButton style={walletBtnStyle} />
+              {canPost && (
+                <button style={styles.postBtn} onClick={() => setShowUpload(true)}>
+                  + POST MEME
+                </button>
+              )}
             </div>
-          )}
+
+            {/* Contract address */}
+            {TOKEN_MINT && (
+              <div style={styles.contractRow} onClick={copyMint} title="Click to copy">
+                <span style={styles.contractLabel}>CA:</span>
+                <span style={styles.contractAddr}>{shortMint}</span>
+                <span style={styles.copyIcon}>{copied ? "✓ COPIED" : "⎘ COPY"}</span>
+              </div>
+            )}
+
+            {connected && !checkingBalance && tokens !== null && tokens < MIN_TOKENS && !isAdmin && (
+              <div style={styles.noTokensWarning}>
+                ⚠ Need {formatTokens(MIN_TOKENS)}+ {TOKEN_NAME} to post
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
+      {/* ── Tier Legend ── */}
       <div style={styles.legend}>
         {TIER_THRESHOLDS.map((t) => (
           <div key={t.label} style={styles.legendItem}>
@@ -143,6 +206,7 @@ export function MemeBoard() {
         ))}
       </div>
 
+      {/* ── Board ── */}
       <main style={styles.board}>
         {loading ? (
           <div style={styles.centerMsg}>
@@ -164,6 +228,7 @@ export function MemeBoard() {
         )}
       </main>
 
+      {/* ── Upload Modal ── */}
       {showUpload && publicKey && tokens !== null && (
         <UploadModal
           wallet={publicKey.toBase58()}
@@ -173,6 +238,7 @@ export function MemeBoard() {
         />
       )}
 
+      {/* ── Detail Modal ── */}
       {selected && (
         <div style={styles.overlay} onClick={() => setSelected(null)}>
           <div style={styles.detailModal} onClick={(e) => e.stopPropagation()}>
@@ -217,14 +283,24 @@ const styles: Record<string, React.CSSProperties> = {
   logoMain: { fontSize:26, fontWeight:900, letterSpacing:5, color:"#FFE500", lineHeight:1 },
   adminBadge: { fontSize:9, letterSpacing:3, color:"#FF3B00", marginTop:3, fontWeight:900 },
   tickerTrack: { fontSize:10, color:"#444", whiteSpace:"nowrap", overflow:"hidden", flex:1, minWidth:0, letterSpacing:2 },
-  headerRight: { display:"flex", alignItems:"center", gap:10, flexShrink:0, flexWrap:"wrap" },
+  headerRight: { display:"flex", alignItems:"center", gap:12, flexShrink:0, flexWrap:"wrap" },
   statsRow: { display:"flex", alignItems:"center", gap:10 },
   stat: { display:"flex", flexDirection:"column", alignItems:"center" },
   statVal: { fontSize:18, fontWeight:900, color:"#FFE500", lineHeight:1 },
   statLbl: { fontSize:8, color:"#555", letterSpacing:2 },
   statDivider: { width:1, height:28, background:"#2a2a2a" },
   balanceBadge: { display:"flex", alignItems:"center", gap:6, background:"#1a1a1a", padding:"6px 10px", fontSize:12, border:"1px solid #2a2a2a" },
+  walletStack: { display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 },
+  walletRow: { display:"flex", alignItems:"center", gap:8 },
   postBtn: { background:"#FF3B00", color:"#fff", border:"none", padding:"8px 16px", fontFamily:"'Courier New',monospace", fontWeight:900, fontSize:12, cursor:"pointer", letterSpacing:1 },
+  contractRow: {
+    display:"flex", alignItems:"center", gap:6, cursor:"pointer",
+    background:"#0d0d0d", border:"1px solid #2a2a2a", padding:"4px 10px",
+    borderRadius:2, transition:"border-color 0.15s",
+  },
+  contractLabel: { fontSize:9, color:"#555", letterSpacing:2, fontWeight:700 },
+  contractAddr: { fontSize:10, color:"#888", letterSpacing:1 },
+  copyIcon: { fontSize:9, color:"#FFE500", letterSpacing:1, fontWeight:700 },
   noTokensWarning: { fontSize:11, color:"#FF3B00", fontWeight:700 },
   legend: { display:"flex", gap:16, padding:"8px 20px", background:"#0a0a0a", borderBottom:"1px solid #1a1a1a", flexWrap:"wrap" },
   legendItem: { display:"flex", alignItems:"center", gap:7 },
