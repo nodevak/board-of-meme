@@ -4,7 +4,6 @@ import { sql, initDB } from "@/lib/db";
 export async function GET() {
   const results: Record<string, unknown> = {};
 
-  // Check env vars
   results.env = {
     DATABASE_URL: process.env.DATABASE_URL ? "SET ✓" : "MISSING ✗",
     HELIUS_RPC_URL: process.env.HELIUS_RPC_URL ? "SET ✓" : "MISSING ✗",
@@ -13,7 +12,6 @@ export async function GET() {
     ADMIN_WALLET: process.env.NEXT_PUBLIC_ADMIN_WALLET ?? "MISSING ✗",
   };
 
-  // Check DB connection
   try {
     await initDB();
     const rows = await sql`SELECT COUNT(*) as count FROM posts`;
@@ -22,5 +20,5 @@ export async function GET() {
     results.database = { status: "ERROR ✗", error: String(err) };
   }
 
-  return NextResponse.json(results, { status: 200 });
+  return NextResponse.json(results);
 }
