@@ -8,23 +8,24 @@ import { Tile } from "./Tile";
 import { UploadModal } from "./UploadModal";
 import { getTier, timeAgo, shortWallet, formatTokens, TIER_THRESHOLDS } from "@/lib/utils";
 
-const TOKEN_NAME  = process.env.NEXT_PUBLIC_TOKEN_NAME ?? "TOKEN";
-const TOKEN_MINT  = process.env.NEXT_PUBLIC_TOKEN_MINT ?? "";
-const MIN_TOKENS  = parseInt(process.env.NEXT_PUBLIC_MIN_TOKENS ?? "1");
+const TOKEN_NAME   = process.env.NEXT_PUBLIC_TOKEN_NAME  ?? "TOKEN";
+const TOKEN_MINT   = process.env.NEXT_PUBLIC_TOKEN_MINT  ?? "";
+const MIN_TOKENS   = parseInt(process.env.NEXT_PUBLIC_MIN_TOKENS ?? "1");
 const ADMIN_WALLET = process.env.NEXT_PUBLIC_ADMIN_WALLET ?? "";
 
 export function MemeBoard() {
   const { publicKey, connected } = useWallet();
-  const [posts, setPosts]                   = useState<Post[]>([]);
-  const [tokens, setTokens]                 = useState<number | null>(null);
+  const [posts, setPosts]                     = useState<Post[]>([]);
+  const [tokens, setTokens]                   = useState<number | null>(null);
   const [checkingBalance, setCheckingBalance] = useState(false);
-  const [showUpload, setShowUpload]          = useState(false);
-  const [selected, setSelected]             = useState<Post | null>(null);
-  const [loading, setLoading]               = useState(true);
-  const [postError, setPostError]           = useState("");
-  const [tick, setTick]                     = useState(0);
-  const [marketCap, setMarketCap]           = useState<string | null>(null);
-  const [copied, setCopied]                 = useState(false);
+  const [showUpload, setShowUpload]           = useState(false);
+  const [selected, setSelected]              = useState<Post | null>(null);
+  const [loading, setLoading]                = useState(true);
+  const [postError, setPostError]            = useState("");
+  const [tick, setTick]                      = useState(0);
+  const [marketCap, setMarketCap]            = useState<string | null>(null);
+  const [holders, setHolders]                = useState<number | null>(null);
+  const [copied, setCopied]                  = useState(false);
 
   // Ticker animation
   useEffect(() => {
@@ -40,6 +41,14 @@ export function MemeBoard() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Fetch real holder count from Helius (server-side)
+  useEffect(() => {
+    fetch("/api/holders")
+      .then((r) => r.json())
+      .then((d) => { if (d.holders !== null) setHolders(d.holders); })
+      .catch(() => {});
+  }, []);
+
   // Fetch market cap from DexScreener
   useEffect(() => {
     if (!TOKEN_MINT || TOKEN_MINT === "YOUR_TOKEN_MINT_ADDRESS_HERE") return;
@@ -49,16 +58,16 @@ export function MemeBoard() {
         const pair = d?.pairs?.[0];
         if (pair?.fdv) {
           const fdv = parseFloat(pair.fdv);
-          if (fdv >= 1_000_000_000) setMarketCap(`$${(fdv / 1_000_000_000).toFixed(1)}B`);
-          else if (fdv >= 1_000_000)  setMarketCap(`$${(fdv / 1_000_000).toFixed(1)}M`);
-          else if (fdv >= 1_000)      setMarketCap(`$${(fdv / 1_000).toFixed(1)}K`);
-          else setMarketCap(`$${fdv.toFixed(0)}`);
+          if (fdv >= 1_000_000_000)     setMarketCap(`$${(fdv / 1_000_000_000).toFixed(1)}B`);
+          else if (fdv >= 1_000_000)    setMarketCap(`$${(fdv / 1_000_000).toFixed(1)}M`);
+          else if (fdv >= 1_000)        setMarketCap(`$${(fdv / 1_000).toFixed(1)}K`);
+          else                          setMarketCap(`$${fdv.toFixed(0)}`);
         }
       })
       .catch(() => {});
   }, []);
 
-  // Token balance
+  // Token balance check
   useEffect(() => {
     if (!connected || !publicKey) { setTokens(null); return; }
     setCheckingBalance(true);
@@ -104,9 +113,8 @@ export function MemeBoard() {
     });
   };
 
-  const canPost    = connected && tokens !== null && !checkingBalance && (tokens >= MIN_TOKENS || isAdmin);
-  const userTier   = tokens ? getTier(tokens) : null;
-  const holders    = new Set(posts.map((p) => p.wallet)).size;
+  const canPost  = connected && tokens !== null && !checkingBalance && (tokens >= MIN_TOKENS || isAdmin);
+  const userTier = tokens ? getTier(tokens) : null;
 
   const tickerText    = `◆ BOARD OF MEME ◆ ${TOKEN_NAME} HOLDERS ONLY ◆ BIGGER BAGS = BIGGER MEME ◆ `;
   const offset        = tick % tickerText.length;
@@ -115,6 +123,12 @@ export function MemeBoard() {
   const shortMint = TOKEN_MINT
     ? `${TOKEN_MINT.slice(0, 6)}...${TOKEN_MINT.slice(-6)}`
     : "";
+
+  const formatHolders = (n: number) => {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`;
+    return n.toLocaleString();
+  };
 
   return (
     <div style={styles.root}>
@@ -131,7 +145,7 @@ export function MemeBoard() {
         </div>
 
         <div style={styles.headerRight}>
-          {/* Stats */}
+          {/* Stats row */}
           <div style={styles.statsRow}>
             <div style={styles.stat}>
               <span style={styles.statVal}>{posts.length}</span>
@@ -139,21 +153,23 @@ export function MemeBoard() {
             </div>
             <div style={styles.statDivider} />
             <div style={styles.stat}>
-              <span style={styles.statVal}>{holders}</span>
+              <span style={styles.statVal}>
+                {holders !== null ? formatHolders(holders) : "—"}
+              </span>
               <span style={styles.statLbl}>HOLDERS</span>
             </div>
             {marketCap && (
               <>
                 <div style={styles.statDivider} />
                 <div style={styles.stat}>
-                  <span style={{ ...styles.statVal, color: "#00FF88" }}>{marketCap}</span>
+                  <span style={{ ...styles.statVal, color:"#00FF88" }}>{marketCap}</span>
                   <span style={styles.statLbl}>MKTCAP</span>
                 </div>
               </>
             )}
           </div>
 
-          {/* My balance badge */}
+          {/* Balance badge */}
           {connected && tokens !== null && (
             <div style={styles.balanceBadge}>
               {userTier && <span>{userTier.emoji}</span>}
@@ -164,7 +180,7 @@ export function MemeBoard() {
             </div>
           )}
 
-          {/* Wallet + post btn + contract address stacked */}
+          {/* Wallet + post + contract stacked */}
           <div style={styles.walletStack}>
             <div style={styles.walletRow}>
               <WalletMultiButton style={walletBtnStyle} />
@@ -175,12 +191,13 @@ export function MemeBoard() {
               )}
             </div>
 
-            {/* Contract address */}
             {TOKEN_MINT && (
-              <div style={styles.contractRow} onClick={copyMint} title="Click to copy">
+              <div style={styles.contractRow} onClick={copyMint} title="Click to copy contract address">
                 <span style={styles.contractLabel}>CA:</span>
                 <span style={styles.contractAddr}>{shortMint}</span>
-                <span style={styles.copyIcon}>{copied ? "✓ COPIED" : "⎘ COPY"}</span>
+                <span style={{ ...styles.copyIcon, color: copied ? "#00FF88" : "#FFE500" }}>
+                  {copied ? "✓ COPIED" : "⎘ COPY"}
+                </span>
               </div>
             )}
 
@@ -290,17 +307,13 @@ const styles: Record<string, React.CSSProperties> = {
   statLbl: { fontSize:8, color:"#555", letterSpacing:2 },
   statDivider: { width:1, height:28, background:"#2a2a2a" },
   balanceBadge: { display:"flex", alignItems:"center", gap:6, background:"#1a1a1a", padding:"6px 10px", fontSize:12, border:"1px solid #2a2a2a" },
-  walletStack: { display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 },
+  walletStack: { display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5 },
   walletRow: { display:"flex", alignItems:"center", gap:8 },
   postBtn: { background:"#FF3B00", color:"#fff", border:"none", padding:"8px 16px", fontFamily:"'Courier New',monospace", fontWeight:900, fontSize:12, cursor:"pointer", letterSpacing:1 },
-  contractRow: {
-    display:"flex", alignItems:"center", gap:6, cursor:"pointer",
-    background:"#0d0d0d", border:"1px solid #2a2a2a", padding:"4px 10px",
-    borderRadius:2, transition:"border-color 0.15s",
-  },
+  contractRow: { display:"flex", alignItems:"center", gap:6, cursor:"pointer", background:"#0d0d0d", border:"1px solid #2a2a2a", padding:"4px 10px", borderRadius:2 },
   contractLabel: { fontSize:9, color:"#555", letterSpacing:2, fontWeight:700 },
   contractAddr: { fontSize:10, color:"#888", letterSpacing:1 },
-  copyIcon: { fontSize:9, color:"#FFE500", letterSpacing:1, fontWeight:700 },
+  copyIcon: { fontSize:9, letterSpacing:1, fontWeight:700 },
   noTokensWarning: { fontSize:11, color:"#FF3B00", fontWeight:700 },
   legend: { display:"flex", gap:16, padding:"8px 20px", background:"#0a0a0a", borderBottom:"1px solid #1a1a1a", flexWrap:"wrap" },
   legendItem: { display:"flex", alignItems:"center", gap:7 },
